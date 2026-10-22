@@ -1,3 +1,6 @@
 *.o
 *.a
 z8lua
+p8luac
+native-run
+diag_dump

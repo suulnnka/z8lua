@@ -43,22 +43,29 @@
 static int findfield (lua_State *L, int objidx, int level) {
   if (level == 0 || !lua_istable(L, -1))
     return 0;  /* not found */
-  lua_pushnil(L);  /* start 'next' loop */
-  while (lua_next(L, -2)) {  /* for each pair in table */
-    if (lua_type(L, -2) == LUA_TSTRING) {  /* ignore non-string keys */
-      if (lua_rawequal(L, objidx, -1)) {  /* found object? */
-        lua_pop(L, 1);  /* remove value (but keep name) */
-        return 1;
-      }
-      else if (findfield(L, objidx, level - 1)) {  /* try recursively */
-        lua_remove(L, -2);  /* remove table (but keep name) */
+  /* p8js edit: pass 1 - direct fields only (deterministic order) */
+  lua_pushnil(L);
+  while (lua_next(L, -2)) {
+    if (lua_type(L, -2) == LUA_TSTRING &&
+        lua_rawequal(L, objidx, -1)) {
+      lua_pop(L, 1);
+      return 1;
+    }
+    lua_pop(L, 1);
+  }
+  /* pass 2 - nested tables */
+  lua_pushnil(L);
+  while (lua_next(L, -2)) {
+    if (lua_type(L, -2) == LUA_TSTRING) {
+      if (findfield(L, objidx, level - 1)) {
+        lua_remove(L, -2);
         lua_pushliteral(L, ".");
-        lua_insert(L, -2);  /* place '.' between the two names */
+        lua_insert(L, -2);
         lua_concat(L, 3);
         return 1;
       }
     }
-    lua_pop(L, 1);  /* remove value */
+    lua_pop(L, 1);
   }
   return 0;  /* not found */
 }

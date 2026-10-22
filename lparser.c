@@ -877,6 +877,8 @@ static void funcargs (LexState *ls, expdesc *f, int line) {
 */
 
 
+static void shortprint (LexState *ls, expdesc *v);
+
 static void primaryexp (LexState *ls, expdesc *v) {
   /* primaryexp -> NAME | '(' expr ')' */
   switch (ls->t.token) {
@@ -890,6 +892,10 @@ static void primaryexp (LexState *ls, expdesc *v) {
     }
     case TK_NAME: {
       singlevar(ls, v);
+      return;
+    }
+    case TK_PRINT: {  /* '?' shortprint as expression */
+      shortprint(ls, v);
       return;
     }
     default: {
@@ -1012,7 +1018,7 @@ static BinOpr getbinopr (int op) {
     case '\\': return OPR_IDIV;
     case '&': return OPR_BAND;
     case '|': return OPR_BOR;
-    case TK_BXOR: return OPR_BXOR;
+    case '~': case TK_BXOR: return OPR_BXOR;
     case TK_SHL: return OPR_SHL;
     case TK_SHR: return OPR_SHR;
     case TK_LSHR: return OPR_LSHR;
@@ -1289,7 +1295,7 @@ static void whilestat (LexState *ls, int line) {
   condexit = cond(ls);
   enterblock(fs, &bl, 1);
   int short_while = ls->t.token != TK_DO && ls->t.token != TK_EOS
-                 && ls->braces == 0 && line == ls->linenumber;
+                 &&  line == ls->linenumber;
   if (short_while)
     ls->emiteol = 1;
   else
@@ -1443,7 +1449,7 @@ static int test_then_block (LexState *ls, int *escapelist) {
   luaX_trackbraces(ls);  /* track braces for short IF */
   expr(ls, &v);  /* read condition */
   short_if &= ls->t.token != TK_THEN && ls->t.token != TK_EOS
-           && ls->braces == 0 && line == ls->linenumber;
+           &&  line == ls->linenumber;
   if (short_if)
     ls->emiteol = 1;
   else
@@ -1606,13 +1612,13 @@ static void retstat (LexState *ls) {
 }
 
 
-static void shortprint (LexState *ls) {
+static void shortprint (LexState *ls, expdesc *v) {
   int line = ls->linenumber;
   FuncState *fs = ls->fs;
 
   /* same as suffixedexp() except we push "print" first */
   expdesc f;
-  TString *n = luaS_new(ls->L, "print");
+  TString *n = luaX_newstring(ls, "print", 5);
   ls->t.seminfo.ts = n;
   ls->t.token = TK_NAME;
   singlevar(ls, &f);
@@ -1644,6 +1650,7 @@ static void shortprint (LexState *ls) {
   init_exp(&f, VCALL, luaK_codeABC(fs, OP_CALL, base, nparams+1, 2));
   luaK_fixline(fs, line);
   fs->freereg = fs->nactvar;
+  *v = f;
 }
 
 
@@ -1656,7 +1663,8 @@ static void statement (LexState *ls) {
       break;
     }
     case TK_PRINT: {
-      shortprint(ls);  /* stat -> shortprint (on a single line) */
+      expdesc v;
+      shortprint(ls, &v);  /* stat -> shortprint (on a single line) */
       break;
     }
     case TK_IF: {  /* stat -> ifstat */

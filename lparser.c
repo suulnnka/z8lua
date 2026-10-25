@@ -1448,12 +1448,15 @@ static int test_then_block (LexState *ls, int *escapelist) {
   luaX_next(ls);  /* skip IF or ELSEIF */
   luaX_trackbraces(ls);  /* track braces for short IF */
   expr(ls, &v);  /* read condition */
-  short_if &= ls->t.token != TK_THEN && ls->t.token != TK_EOS
+  short_if &= ls->t.token != TK_THEN && ls->t.token != TK_DO && ls->t.token != TK_EOS
            &&  line == ls->linenumber;
   if (short_if)
     ls->emiteol = 1;
-  else
-    checknext(ls, TK_THEN);
+  else {
+    /* PICO-8 allows 'do' as an alternative to 'then' in if statements */
+    if (!testnext(ls, TK_THEN) && !testnext(ls, TK_DO))
+      error_expected(ls, TK_THEN);
+  }
   if (ls->t.token == TK_GOTO || ls->t.token == TK_BREAK) {
     luaK_goiffalse(ls->fs, &v);  /* will jump to label if condition is true */
     enterblock(fs, &bl, 0);  /* must enter block before 'goto' */
@@ -1486,9 +1489,9 @@ static void ifstat (LexState *ls, int line) {
   FuncState *fs = ls->fs;
   int escapelist = NO_JUMP;  /* exit list for finished parts */
   int short_if = test_then_block(ls, &escapelist);  /* IF cond THEN block */
-  while (ls->t.token == TK_ELSEIF)
+  while (ls->t.token == TK_ELSEIF && (!short_if || ls->linenumber == line))
     test_then_block(ls, &escapelist);  /* ELSEIF cond THEN block */
-  if (testnext(ls, TK_ELSE))
+  if ((!short_if || ls->linenumber == line) && testnext(ls, TK_ELSE))
     block(ls);  /* `else' part */
   if (!short_if)
     check_match(ls, TK_END, TK_IF, line);
